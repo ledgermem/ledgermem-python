@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Python SDK for LedgerMem Memory — long-term memory infrastructure for AI agents."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 authors = [{ name = "LedgerMem", email = "founders@proofly.dev" }]
 keywords = ["memory", "llm", "agents", "rag", "vector", "longmemeval"]
 classifiers = [
@@ -16,6 +16,7 @@ classifiers = [
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -27,6 +28,9 @@ dependencies = [
   "httpx>=0.27,<1.0",
   "pydantic>=2.7,<3.0",
   "typing-extensions>=4.10",
+  # Lets pydantic v2 evaluate `X | Y` style annotations on Python 3.9
+  # (Pydantic falls back to it automatically when present).
+  'eval-type-backport>=0.2; python_version<"3.10"',
 ]
 
 [project.optional-dependencies]
@@ -49,13 +53,13 @@ packages = ["src/ledgermem"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.9"
 strict = true
 warn_return_any = true
 warn_unused_ignores = true

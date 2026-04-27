@@ -7,9 +7,10 @@ LangGraph nodes, FastAPI routes, or any other event-loop-friendly codebase.
 from __future__ import annotations
 
 import os
-from typing import Any, Self
+from typing import Any
 
 import httpx
+from typing_extensions import Self
 
 from .errors import LedgerMemHTTPError
 from .models import Memory, PaginatedMemories, SearchResponse
