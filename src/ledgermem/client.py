@@ -11,6 +11,7 @@ import os
 import random
 import time
 from typing import Any, Awaitable, Callable, TypeVar
+from urllib.parse import quote
 
 import httpx
 from typing_extensions import Self
@@ -35,7 +36,44 @@ def _retry_delay(attempt: int) -> float:
 
 
 def _is_retryable_status(status: int) -> bool:
+    # 501 Not Implemented is a permanent failure — retrying wastes round-trips.
+    if status == 501:
+        return False
     return status == 429 or 500 <= status < 600
+
+
+def _retry_after_seconds(resp: httpx.Response) -> float | None:
+    """Parse a Retry-After header (seconds or HTTP-date). Returns ``None`` if absent or invalid."""
+    raw = resp.headers.get("retry-after")
+    if not raw:
+        return None
+    raw = raw.strip()
+    try:
+        # Delta-seconds form.
+        secs = float(raw)
+        return max(0.0, min(secs, _RETRY_MAX_DELAY))
+    except ValueError:
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+        from datetime import datetime, timezone
+
+        when = parsedate_to_datetime(raw)
+        if when is None:
+            return None
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        delta = (when - datetime.now(timezone.utc)).total_seconds()
+        return max(0.0, min(delta, _RETRY_MAX_DELAY))
+    except (TypeError, ValueError):
+        return None
+
+
+def _delay_for(resp: httpx.Response, attempt: int) -> float:
+    server_hint = _retry_after_seconds(resp)
+    if server_hint is not None:
+        return server_hint
+    return _retry_delay(attempt)
 
 
 def _send_with_retries(
@@ -53,7 +91,7 @@ def _send_with_retries(
             attempt += 1
             continue
         if _is_retryable_status(resp.status_code) and attempt < max_retries:
-            time.sleep(_retry_delay(attempt))
+            time.sleep(_delay_for(resp, attempt))
             attempt += 1
             continue
         return resp
@@ -74,7 +112,7 @@ async def _send_with_retries_async(
             attempt += 1
             continue
         if _is_retryable_status(resp.status_code) and attempt < max_retries:
-            await asyncio.sleep(_retry_delay(attempt))
+            await asyncio.sleep(_delay_for(resp, attempt))
             attempt += 1
             continue
         return resp
@@ -207,7 +245,7 @@ class LedgerMem:
         if not payload:
             raise ValueError("update() requires at least one of content/metadata")
         resp = _send_with_retries(
-            lambda: self._client.patch(f"/v1/memories/{memory_id}", json=payload),
+            lambda: self._client.patch(f"/v1/memories/{quote(memory_id, safe='')}", json=payload),
             self._max_retries,
         )
         _raise_for_status(resp)
@@ -215,7 +253,7 @@ class LedgerMem:
 
     def delete(self, memory_id: str) -> None:
         resp = _send_with_retries(
-            lambda: self._client.delete(f"/v1/memories/{memory_id}"),
+            lambda: self._client.delete(f"/v1/memories/{quote(memory_id, safe='')}"),
             self._max_retries,
         )
         _raise_for_status(resp)
@@ -331,7 +369,7 @@ class AsyncLedgerMem:
         if not payload:
             raise ValueError("update() requires at least one of content/metadata")
         resp = await _send_with_retries_async(
-            lambda: self._client.patch(f"/v1/memories/{memory_id}", json=payload),
+            lambda: self._client.patch(f"/v1/memories/{quote(memory_id, safe='')}", json=payload),
             self._max_retries,
         )
         _raise_for_status(resp)
@@ -339,7 +377,7 @@ class AsyncLedgerMem:
 
     async def delete(self, memory_id: str) -> None:
         resp = await _send_with_retries_async(
-            lambda: self._client.delete(f"/v1/memories/{memory_id}"),
+            lambda: self._client.delete(f"/v1/memories/{quote(memory_id, safe='')}"),
             self._max_retries,
         )
         _raise_for_status(resp)
