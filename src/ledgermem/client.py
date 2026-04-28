@@ -6,8 +6,11 @@ LangGraph nodes, FastAPI routes, or any other event-loop-friendly codebase.
 
 from __future__ import annotations
 
+import asyncio
 import os
-from typing import Any
+import random
+import time
+from typing import Any, Awaitable, Callable, TypeVar
 
 import httpx
 from typing_extensions import Self
@@ -18,6 +21,63 @@ from .models import Memory, PaginatedMemories, SearchResponse
 _DEFAULT_BASE_URL = "https://api.proofly.dev"
 _DEFAULT_TIMEOUT = 30.0
 _USER_AGENT = "ledgermem-python/0.1.0"
+_DEFAULT_MAX_RETRIES = 3
+_RETRY_BASE_DELAY = 0.2
+_RETRY_MAX_DELAY = 5.0
+
+T = TypeVar("T")
+
+
+def _retry_delay(attempt: int) -> float:
+    """Exponential backoff with full jitter."""
+    capped = min(_RETRY_BASE_DELAY * (2**attempt), _RETRY_MAX_DELAY)
+    return random.uniform(0, capped)
+
+
+def _is_retryable_status(status: int) -> bool:
+    return status == 429 or 500 <= status < 600
+
+
+def _send_with_retries(
+    fn: Callable[[], httpx.Response],
+    max_retries: int,
+) -> httpx.Response:
+    attempt = 0
+    while True:
+        try:
+            resp = fn()
+        except (httpx.TransportError, httpx.TimeoutException):
+            if attempt >= max_retries:
+                raise
+            time.sleep(_retry_delay(attempt))
+            attempt += 1
+            continue
+        if _is_retryable_status(resp.status_code) and attempt < max_retries:
+            time.sleep(_retry_delay(attempt))
+            attempt += 1
+            continue
+        return resp
+
+
+async def _send_with_retries_async(
+    fn: Callable[[], Awaitable[httpx.Response]],
+    max_retries: int,
+) -> httpx.Response:
+    attempt = 0
+    while True:
+        try:
+            resp = await fn()
+        except (httpx.TransportError, httpx.TimeoutException):
+            if attempt >= max_retries:
+                raise
+            await asyncio.sleep(_retry_delay(attempt))
+            attempt += 1
+            continue
+        if _is_retryable_status(resp.status_code) and attempt < max_retries:
+            await asyncio.sleep(_retry_delay(attempt))
+            attempt += 1
+            continue
+        return resp
 
 
 def _resolve(value: str | None, env_var: str, label: str) -> str:
@@ -70,12 +130,14 @@ class LedgerMem:
         base_url: str | None = None,
         timeout: float = _DEFAULT_TIMEOUT,
         client: httpx.Client | None = None,
+        max_retries: int = _DEFAULT_MAX_RETRIES,
     ) -> None:
         self._api_key = _resolve(api_key, "LEDGERMEM_API_KEY", "api_key")
         self._workspace_id = _resolve(workspace_id, "LEDGERMEM_WORKSPACE_ID", "workspace_id")
         self._actor_id = actor_id or os.environ.get("LEDGERMEM_ACTOR_ID")
         self._base_url = (base_url or os.environ.get("LEDGERMEM_API_URL") or _DEFAULT_BASE_URL).rstrip("/")
         self._owns_client = client is None
+        self._max_retries = max(0, int(max_retries))
         self._client = client or httpx.Client(
             base_url=self._base_url,
             timeout=timeout,
@@ -104,7 +166,10 @@ class LedgerMem:
         payload: dict[str, Any] = {"query": query, "limit": limit}
         if actor_id is not None:
             payload["actorId"] = actor_id
-        resp = self._client.post("/v1/search", json=payload)
+        resp = _send_with_retries(
+            lambda: self._client.post("/v1/search", json=payload),
+            self._max_retries,
+        )
         _raise_for_status(resp)
         return SearchResponse.model_validate(resp.json())
 
@@ -120,7 +185,10 @@ class LedgerMem:
             payload["metadata"] = metadata
         if actor_id is not None:
             payload["actorId"] = actor_id
-        resp = self._client.post("/v1/memories", json=payload)
+        resp = _send_with_retries(
+            lambda: self._client.post("/v1/memories", json=payload),
+            self._max_retries,
+        )
         _raise_for_status(resp)
         return Memory.model_validate(resp.json())
 
@@ -138,12 +206,18 @@ class LedgerMem:
             payload["metadata"] = metadata
         if not payload:
             raise ValueError("update() requires at least one of content/metadata")
-        resp = self._client.patch(f"/v1/memories/{memory_id}", json=payload)
+        resp = _send_with_retries(
+            lambda: self._client.patch(f"/v1/memories/{memory_id}", json=payload),
+            self._max_retries,
+        )
         _raise_for_status(resp)
         return Memory.model_validate(resp.json())
 
     def delete(self, memory_id: str) -> None:
-        resp = self._client.delete(f"/v1/memories/{memory_id}")
+        resp = _send_with_retries(
+            lambda: self._client.delete(f"/v1/memories/{memory_id}"),
+            self._max_retries,
+        )
         _raise_for_status(resp)
 
     def list(
@@ -158,7 +232,10 @@ class LedgerMem:
             params["cursor"] = cursor
         if actor_id is not None:
             params["actorId"] = actor_id
-        resp = self._client.get("/v1/memories", params=params)
+        resp = _send_with_retries(
+            lambda: self._client.get("/v1/memories", params=params),
+            self._max_retries,
+        )
         _raise_for_status(resp)
         return PaginatedMemories.model_validate(resp.json())
 
@@ -179,12 +256,14 @@ class AsyncLedgerMem:
         base_url: str | None = None,
         timeout: float = _DEFAULT_TIMEOUT,
         client: httpx.AsyncClient | None = None,
+        max_retries: int = _DEFAULT_MAX_RETRIES,
     ) -> None:
         self._api_key = _resolve(api_key, "LEDGERMEM_API_KEY", "api_key")
         self._workspace_id = _resolve(workspace_id, "LEDGERMEM_WORKSPACE_ID", "workspace_id")
         self._actor_id = actor_id or os.environ.get("LEDGERMEM_ACTOR_ID")
         self._base_url = (base_url or os.environ.get("LEDGERMEM_API_URL") or _DEFAULT_BASE_URL).rstrip("/")
         self._owns_client = client is None
+        self._max_retries = max(0, int(max_retries))
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
             timeout=timeout,
@@ -211,7 +290,10 @@ class AsyncLedgerMem:
         payload: dict[str, Any] = {"query": query, "limit": limit}
         if actor_id is not None:
             payload["actorId"] = actor_id
-        resp = await self._client.post("/v1/search", json=payload)
+        resp = await _send_with_retries_async(
+            lambda: self._client.post("/v1/search", json=payload),
+            self._max_retries,
+        )
         _raise_for_status(resp)
         return SearchResponse.model_validate(resp.json())
 
@@ -227,7 +309,10 @@ class AsyncLedgerMem:
             payload["metadata"] = metadata
         if actor_id is not None:
             payload["actorId"] = actor_id
-        resp = await self._client.post("/v1/memories", json=payload)
+        resp = await _send_with_retries_async(
+            lambda: self._client.post("/v1/memories", json=payload),
+            self._max_retries,
+        )
         _raise_for_status(resp)
         return Memory.model_validate(resp.json())
 
@@ -245,12 +330,18 @@ class AsyncLedgerMem:
             payload["metadata"] = metadata
         if not payload:
             raise ValueError("update() requires at least one of content/metadata")
-        resp = await self._client.patch(f"/v1/memories/{memory_id}", json=payload)
+        resp = await _send_with_retries_async(
+            lambda: self._client.patch(f"/v1/memories/{memory_id}", json=payload),
+            self._max_retries,
+        )
         _raise_for_status(resp)
         return Memory.model_validate(resp.json())
 
     async def delete(self, memory_id: str) -> None:
-        resp = await self._client.delete(f"/v1/memories/{memory_id}")
+        resp = await _send_with_retries_async(
+            lambda: self._client.delete(f"/v1/memories/{memory_id}"),
+            self._max_retries,
+        )
         _raise_for_status(resp)
 
     async def list(
@@ -265,6 +356,9 @@ class AsyncLedgerMem:
             params["cursor"] = cursor
         if actor_id is not None:
             params["actorId"] = actor_id
-        resp = await self._client.get("/v1/memories", params=params)
+        resp = await _send_with_retries_async(
+            lambda: self._client.get("/v1/memories", params=params),
+            self._max_retries,
+        )
         _raise_for_status(resp)
         return PaginatedMemories.model_validate(resp.json())
