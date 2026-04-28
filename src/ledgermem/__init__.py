@@ -6,8 +6,8 @@ Quickstart:
 
     memory = LedgerMem(api_key="lk_live_...", workspace_id="ws_...")
     memory.add("User prefers Japanese short-grain rice for onigiri.")
-    hits = memory.search("what kind of rice does the user like?")
-    for hit in hits:
+    response = memory.search("what kind of rice does the user like?")
+    for hit in response.hits:
         print(hit.score, hit.content)
 
 Async variant:
@@ -18,8 +18,8 @@ Async variant:
     async def main() -> None:
         async with AsyncLedgerMem(api_key="...", workspace_id="...") as m:
             await m.add("Trip to Costa Rica was 5 days, brought 7 shirts.")
-            hits = await m.search("how many shirts did I pack for Costa Rica?")
-            print(hits[0].content)
+            response = await m.search("how many shirts did I pack for Costa Rica?")
+            print(response.hits[0].content)
 
     asyncio.run(main())
 """

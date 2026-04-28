@@ -36,7 +36,7 @@ def _headers(api_key: str, workspace_id: str, actor_id: str | None) -> dict[str,
         "user-agent": _USER_AGENT,
         "content-type": "application/json",
     }
-    if actor_id:
+    if actor_id is not None:
         h["x-actor-id"] = actor_id
     return h
 
@@ -75,6 +75,7 @@ class LedgerMem:
         self._workspace_id = _resolve(workspace_id, "LEDGERMEM_WORKSPACE_ID", "workspace_id")
         self._actor_id = actor_id or os.environ.get("LEDGERMEM_ACTOR_ID")
         self._base_url = (base_url or os.environ.get("LEDGERMEM_API_URL") or _DEFAULT_BASE_URL).rstrip("/")
+        self._owns_client = client is None
         self._client = client or httpx.Client(
             base_url=self._base_url,
             timeout=timeout,
@@ -88,7 +89,8 @@ class LedgerMem:
         self.close()
 
     def close(self) -> None:
-        self._client.close()
+        if self._owns_client:
+            self._client.close()
 
     # ----- public API -----
 
@@ -100,7 +102,7 @@ class LedgerMem:
         actor_id: str | None = None,
     ) -> SearchResponse:
         payload: dict[str, Any] = {"query": query, "limit": limit}
-        if actor_id:
+        if actor_id is not None:
             payload["actorId"] = actor_id
         resp = self._client.post("/v1/search", json=payload)
         _raise_for_status(resp)
@@ -116,7 +118,7 @@ class LedgerMem:
         payload: dict[str, Any] = {"content": content}
         if metadata is not None:
             payload["metadata"] = metadata
-        if actor_id:
+        if actor_id is not None:
             payload["actorId"] = actor_id
         resp = self._client.post("/v1/memories", json=payload)
         _raise_for_status(resp)
@@ -152,9 +154,9 @@ class LedgerMem:
         actor_id: str | None = None,
     ) -> PaginatedMemories:
         params: dict[str, Any] = {"limit": limit}
-        if cursor:
+        if cursor is not None:
             params["cursor"] = cursor
-        if actor_id:
+        if actor_id is not None:
             params["actorId"] = actor_id
         resp = self._client.get("/v1/memories", params=params)
         _raise_for_status(resp)
@@ -182,6 +184,7 @@ class AsyncLedgerMem:
         self._workspace_id = _resolve(workspace_id, "LEDGERMEM_WORKSPACE_ID", "workspace_id")
         self._actor_id = actor_id or os.environ.get("LEDGERMEM_ACTOR_ID")
         self._base_url = (base_url or os.environ.get("LEDGERMEM_API_URL") or _DEFAULT_BASE_URL).rstrip("/")
+        self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
             timeout=timeout,
@@ -195,7 +198,8 @@ class AsyncLedgerMem:
         await self.aclose()
 
     async def aclose(self) -> None:
-        await self._client.aclose()
+        if self._owns_client:
+            await self._client.aclose()
 
     async def search(
         self,
@@ -205,7 +209,7 @@ class AsyncLedgerMem:
         actor_id: str | None = None,
     ) -> SearchResponse:
         payload: dict[str, Any] = {"query": query, "limit": limit}
-        if actor_id:
+        if actor_id is not None:
             payload["actorId"] = actor_id
         resp = await self._client.post("/v1/search", json=payload)
         _raise_for_status(resp)
@@ -221,7 +225,7 @@ class AsyncLedgerMem:
         payload: dict[str, Any] = {"content": content}
         if metadata is not None:
             payload["metadata"] = metadata
-        if actor_id:
+        if actor_id is not None:
             payload["actorId"] = actor_id
         resp = await self._client.post("/v1/memories", json=payload)
         _raise_for_status(resp)
@@ -257,9 +261,9 @@ class AsyncLedgerMem:
         actor_id: str | None = None,
     ) -> PaginatedMemories:
         params: dict[str, Any] = {"limit": limit}
-        if cursor:
+        if cursor is not None:
             params["cursor"] = cursor
-        if actor_id:
+        if actor_id is not None:
             params["actorId"] = actor_id
         resp = await self._client.get("/v1/memories", params=params)
         _raise_for_status(resp)

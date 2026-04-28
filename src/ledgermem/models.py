@@ -38,7 +38,7 @@ class SearchHit(_Base):
 class SearchResponse(_Base):
     hits: list[SearchHit]
     query: str
-    latency_ms: int = Field(alias="latencyMs")
+    latency_ms: float = Field(alias="latencyMs", ge=0)
 
 
 class PaginatedMemories(_Base):
