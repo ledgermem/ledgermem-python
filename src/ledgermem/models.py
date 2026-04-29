@@ -1,4 +1,4 @@
-"""Pydantic models mirroring the LedgerMem REST API."""
+"""Pydantic models mirroring the Mnemo REST API."""
 
 from __future__ import annotations
 

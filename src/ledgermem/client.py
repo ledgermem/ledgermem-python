@@ -1,4 +1,4 @@
-"""Sync + async LedgerMem clients.
+"""Sync + async Mnemo clients.
 
 Both clients share the same surface; the async one is suitable for use inside
 LangGraph nodes, FastAPI routes, or any other event-loop-friendly codebase.
@@ -16,12 +16,12 @@ from urllib.parse import quote
 import httpx
 from typing_extensions import Self
 
-from .errors import LedgerMemHTTPError
+from .errors import MnemoHTTPError
 from .models import Memory, PaginatedMemories, SearchResponse
 
-_DEFAULT_BASE_URL = "https://api.proofly.dev"
+_DEFAULT_BASE_URL = "https://api.getmnemo.xyz"
 _DEFAULT_TIMEOUT = 30.0
-_USER_AGENT = "ledgermem-python/0.1.0"
+_USER_AGENT = "getmnemo-python/0.1.0"
 _DEFAULT_MAX_RETRIES = 3
 _RETRY_BASE_DELAY = 0.2
 _RETRY_MAX_DELAY = 5.0
@@ -149,11 +149,11 @@ def _raise_for_status(resp: httpx.Response) -> None:
     except ValueError:
         body = resp.text
         message = body or resp.reason_phrase
-    raise LedgerMemHTTPError(message or "Unknown error", resp.status_code, body)
+    raise MnemoHTTPError(message or "Unknown error", resp.status_code, body)
 
 
-class LedgerMem:
-    """Synchronous LedgerMem Memory client.
+class Mnemo:
+    """Synchronous Mnemo Memory client.
 
     All public methods make a single HTTP round-trip and return typed Pydantic
     models. The underlying httpx.Client is created on first use and reused.
@@ -170,10 +170,10 @@ class LedgerMem:
         client: httpx.Client | None = None,
         max_retries: int = _DEFAULT_MAX_RETRIES,
     ) -> None:
-        self._api_key = _resolve(api_key, "LEDGERMEM_API_KEY", "api_key")
-        self._workspace_id = _resolve(workspace_id, "LEDGERMEM_WORKSPACE_ID", "workspace_id")
-        self._actor_id = actor_id or os.environ.get("LEDGERMEM_ACTOR_ID")
-        self._base_url = (base_url or os.environ.get("LEDGERMEM_API_URL") or _DEFAULT_BASE_URL).rstrip("/")
+        self._api_key = _resolve(api_key, "GETMNEMO_API_KEY", "api_key")
+        self._workspace_id = _resolve(workspace_id, "GETMNEMO_WORKSPACE_ID", "workspace_id")
+        self._actor_id = actor_id or os.environ.get("GETMNEMO_ACTOR_ID")
+        self._base_url = (base_url or os.environ.get("GETMNEMO_API_URL") or _DEFAULT_BASE_URL).rstrip("/")
         self._owns_client = client is None
         self._max_retries = max(0, int(max_retries))
         self._client = client or httpx.Client(
@@ -278,8 +278,8 @@ class LedgerMem:
         return PaginatedMemories.model_validate(resp.json())
 
 
-class AsyncLedgerMem:
-    """Asynchronous variant of :class:`LedgerMem`.
+class AsyncMnemo:
+    """Asynchronous variant of :class:`Mnemo`.
 
     Use as an async context manager so the underlying connection pool is
     closed deterministically.
@@ -296,10 +296,10 @@ class AsyncLedgerMem:
         client: httpx.AsyncClient | None = None,
         max_retries: int = _DEFAULT_MAX_RETRIES,
     ) -> None:
-        self._api_key = _resolve(api_key, "LEDGERMEM_API_KEY", "api_key")
-        self._workspace_id = _resolve(workspace_id, "LEDGERMEM_WORKSPACE_ID", "workspace_id")
-        self._actor_id = actor_id or os.environ.get("LEDGERMEM_ACTOR_ID")
-        self._base_url = (base_url or os.environ.get("LEDGERMEM_API_URL") or _DEFAULT_BASE_URL).rstrip("/")
+        self._api_key = _resolve(api_key, "GETMNEMO_API_KEY", "api_key")
+        self._workspace_id = _resolve(workspace_id, "GETMNEMO_WORKSPACE_ID", "workspace_id")
+        self._actor_id = actor_id or os.environ.get("GETMNEMO_ACTOR_ID")
+        self._base_url = (base_url or os.environ.get("GETMNEMO_API_URL") or _DEFAULT_BASE_URL).rstrip("/")
         self._owns_client = client is None
         self._max_retries = max(0, int(max_retries))
         self._client = client or httpx.AsyncClient(

@@ -1,7 +1,7 @@
-"""Smoke tests for the LedgerMem client.
+"""Smoke tests for the Mnemo client.
 
 These tests use httpx's MockTransport so they run offline. Real-API smoke
-tests live in tests/integration/ and are gated by LEDGERMEM_RUN_INTEGRATION=1.
+tests live in tests/integration/ and are gated by GETMNEMO_RUN_INTEGRATION=1.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 import pytest
 
-from ledgermem import AsyncLedgerMem, LedgerMem, LedgerMemHTTPError
+from getmnemo import AsyncMnemo, Mnemo, MnemoHTTPError
 
 ISO = datetime(2026, 4, 27, 12, 0, 0, tzinfo=timezone.utc).isoformat()
 
@@ -61,7 +61,7 @@ def test_search_returns_typed_hits() -> None:
             },
         )
 
-    client = LedgerMem(
+    client = Mnemo(
         api_key="test",
         workspace_id="ws_test",
         client=_mock(httpx.MockTransport(handler)),
@@ -80,7 +80,7 @@ def test_add_memory_returns_typed_memory() -> None:
         assert req.url.path == "/v1/memories"
         return httpx.Response(200, json=_memory_response())
 
-    client = LedgerMem(
+    client = Mnemo(
         api_key="test",
         workspace_id="ws_test",
         client=_mock(httpx.MockTransport(handler)),
@@ -94,19 +94,19 @@ def test_http_error_includes_status_and_body() -> None:
     def handler(_req: httpx.Request) -> httpx.Response:
         return httpx.Response(401, json={"message": "invalid api key"})
 
-    client = LedgerMem(
+    client = Mnemo(
         api_key="test",
         workspace_id="ws_test",
         client=_mock(httpx.MockTransport(handler)),
     )
-    with pytest.raises(LedgerMemHTTPError) as ei:
+    with pytest.raises(MnemoHTTPError) as ei:
         client.search("anything")
     assert ei.value.status == 401
     assert "invalid api key" in str(ei.value)
 
 
 def test_update_requires_at_least_one_field() -> None:
-    client = LedgerMem(
+    client = Mnemo(
         api_key="test",
         workspace_id="ws_test",
         client=_mock(httpx.MockTransport(lambda _r: httpx.Response(200, json=_memory_response()))),
@@ -126,7 +126,7 @@ async def test_async_search_round_trips() -> None:
 
     transport = httpx.MockTransport(handler)
     async_client = httpx.AsyncClient(base_url="http://test", transport=transport)
-    async with AsyncLedgerMem(
+    async with AsyncMnemo(
         api_key="test", workspace_id="ws_test", client=async_client
     ) as m:
         res = await m.search("anything")

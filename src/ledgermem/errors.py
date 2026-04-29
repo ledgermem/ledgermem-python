@@ -1,15 +1,15 @@
-"""Typed exceptions raised by the LedgerMem SDK."""
+"""Typed exceptions raised by the Mnemo SDK."""
 
 from __future__ import annotations
 
 from typing import Any
 
 
-class LedgerMemError(Exception):
+class MnemoError(Exception):
     """Base class for all SDK errors."""
 
 
-class LedgerMemHTTPError(LedgerMemError):
+class MnemoHTTPError(MnemoError):
     """Raised when the API returns a non-2xx response.
 
     The original response body is preserved on `body` for debugging.
